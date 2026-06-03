@@ -262,7 +262,18 @@ function addLocation() {
   const name = document.getElementById('new-name').value.trim();
   if (!name) { toast('Enter a location name'); return; }
   const radius = parseInt(document.getElementById('new-radius').value) || 100;
-  const coords = state.capturedCoords;
+  let coords = state.capturedCoords;
+  if (!coords) {
+    const raw = document.getElementById('new-coords').value.trim();
+    if (raw) {
+      const parts = raw.split(',').map(s => parseFloat(s.trim()));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        coords = { lat: parts[0], lng: parts[1] };
+      } else {
+        toast('Invalid coordinates — use: 48.1234, 17.5678'); return;
+      }
+    }
+  }
   const loc = {
     id: Date.now().toString(),
     name,
