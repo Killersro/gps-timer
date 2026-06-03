@@ -43,7 +43,7 @@
   .btn-checkout:active{transform:scale(.97)}
 
   /* Location cards */
-  .loc-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:.15s;position:relative;overflow:hidden}
+  .loc-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;transition:.15s;position:relative;overflow:hidden}
   .loc-card:active{background:var(--surface2)}
   .loc-card.checked-in{border-color:var(--accent);background:rgba(200,240,96,.06)}
   .loc-card .loc-header{display:flex;justify-content:space-between;align-items:flex-start}
@@ -246,13 +246,13 @@ function renderLocations() {
           ${active ? '<div class="loc-badge">ACTIVE</div>' : ''}
         </div>
       </div>
-      <div class="loc-actions">
+      <div class="loc-actions" onclick="event.stopPropagation()">
         ${active
           ? `<button class="btn-sm danger" onclick="checkOut()">Check out</button>`
-          : `<button class="btn-sm primary" onclick="checkIn(${JSON.stringify(loc.id)})">Check in</button>`
+          : `<button class="btn-sm primary" onclick="checkIn('${loc.id}')">Check in</button>`
         }
-        <button class="btn-sm" onclick="editLocation(${JSON.stringify(loc.id)})">Edit</button>
-        <button class="btn-sm danger" onclick="deleteLocation(${JSON.stringify(loc.id)})">Delete</button>
+        <button class="btn-sm" onclick="editLocation('${loc.id}')">Edit</button>
+        <button class="btn-sm danger" onclick="deleteLocation('${loc.id}')">Delete</button>
       </div>
     </div>`;
   }).join('');
