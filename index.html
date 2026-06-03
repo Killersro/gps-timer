@@ -417,13 +417,21 @@ function startGPSWatch() {
 }
 
 function checkAutoLocation(pos) {
-  if (state.activeSession) return;
+  if (state.activeSession) {
+    const activeLoc = state.locations.find(l => l.id === state.activeSession.locId);
+    if (activeLoc && activeLoc.lat && activeLoc.lng) {
+      const dist = haversine(pos.coords.latitude, pos.coords.longitude, activeLoc.lat, activeLoc.lng);
+      if (dist > activeLoc.radius) {
+        const name = activeLoc.name;
+        checkOut();
+        toast('Left ' + name + ' — checked out automatically');
+      }
+    }
+    return;
+  }
   const nearest = findNearestLocation(pos);
   if (nearest && nearest.dist <= nearest.loc.radius) {
-    // auto check in only if within radius
-    if (!state.activeSession) {
-      checkIn(nearest.loc.id);
-    }
+    checkIn(nearest.loc.id);
   }
 }
 
