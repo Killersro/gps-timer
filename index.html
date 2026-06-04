@@ -186,6 +186,30 @@
   </div>
 </div>
 
+<!-- Edit modal -->
+<div class="gps-overlay" id="edit-overlay">
+  <div class="gps-card" style="width:300px">
+    <h3 style="margin-bottom:16px">Edit location</h3>
+    <div class="field" style="text-align:left">
+      <label>Name</label>
+      <input type="text" id="edit-name" placeholder="Location name">
+    </div>
+    <div class="field" style="text-align:left">
+      <label>Coordinates (lat, lng)</label>
+      <input type="text" id="edit-coords" placeholder="e.g. 48.1234, 17.5678">
+    </div>
+    <div class="field" style="text-align:left">
+      <label>GPS radius (meters)</label>
+      <input type="number" id="edit-radius" placeholder="100">
+    </div>
+    <button class="btn-capture" onclick="editCaptureGPS()" style="margin-bottom:10px">📍 Use my current GPS location</button>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn-sm" style="flex:1;padding:10px" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-sm primary" style="flex:1;padding:10px" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let state = {
@@ -220,42 +244,45 @@ function showTab(name) {
 
 // ── Locations ──────────────────────────────────────────────────────────────
 function renderLocations() {
-  const list = document.getElementById('loc-list');
-  const title = document.getElementById('loc-section-title');
+  var list = document.getElementById('loc-list');
+  var title = document.getElementById('loc-section-title');
   if (state.locations.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="icon">📍</div><p>No locations yet.<br>Add one below to get started.</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="icon">&#128205;</div><p>No locations yet.<br>Add one below to get started.</p></div>';
     title.style.display = 'none';
     return;
   }
   title.style.display = 'block';
-  list.innerHTML = state.locations.map((loc, i) => {
-    const totalMs = totalMillis(loc.id);
-    const active = state.activeSession && state.activeSession.locId === loc.id;
-    const hasCoords = loc.lat && loc.lng;
-    return `
-    <div class="loc-card ${active ? 'checked-in' : ''}" id="card-${loc.id}">
-      <div class="loc-header">
-        <div>
-          <div class="loc-title">${loc.name}</div>
-          <div class="loc-meta">
-            ${hasCoords ? `<span class="gps-dot"></span>GPS: ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)} (${loc.radius}m)` : 'Manual only'}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div class="loc-hours">${formatDuration(totalMs)}</div>
-          ${active ? '<div class="loc-badge">ACTIVE</div>' : ''}
-        </div>
-      </div>
-      <div class="loc-actions" onclick="event.stopPropagation()">
-        ${active
-          ? `<button class="btn-sm danger" onclick="checkOut()">Check out</button>`
-          : `<button class="btn-sm primary" onclick="checkIn('${loc.id}')">Check in</button>`
-        }
-        <button class="btn-sm" onclick="editLocation('${loc.id}')">Edit</button>
-        <button class="btn-sm danger" onclick="deleteLocation('${loc.id}')">Delete</button>
-      </div>
-    </div>`;
-  }).join('');
+  var html = '';
+  for (var i = 0; i < state.locations.length; i++) {
+    var loc = state.locations[i];
+    var totalMs = totalMillis(loc.id);
+    var active = state.activeSession && state.activeSession.locId === loc.id;
+    var metaHTML = (loc.lat && loc.lng)
+      ? '<span class="gps-dot"></span>GPS: ' + loc.lat.toFixed(4) + ', ' + loc.lng.toFixed(4) + ' (' + loc.radius + 'm)'
+      : 'Manual only';
+    var badgeHTML = active ? '<div class="loc-badge">ACTIVE</div>' : '';
+    var checkinBtn = active
+      ? '<button class="btn-sm danger" onclick="checkOut()">Check out</button>'
+      : '<button class="btn-sm primary" onclick="checkIn(event.currentTarget)" data-id="' + loc.id + '">Check in</button>';
+    var editBtn   = '<button class="btn-sm" onclick="editLocation(event.currentTarget)" data-id="' + loc.id + '">Edit</button>';
+    var deleteBtn = '<button class="btn-sm danger" onclick="deleteLocation(event.currentTarget)" data-id="' + loc.id + '">Delete</button>';
+    html += '<div class="loc-card ' + (active ? 'checked-in' : '') + '" id="card-' + loc.id + '">'
+      + '<div class="loc-header">'
+      + '<div>'
+      + '<div class="loc-title">' + loc.name + '</div>'
+      + '<div class="loc-meta">' + metaHTML + '</div>'
+      + '</div>'
+      + '<div style="text-align:right">'
+      + '<div class="loc-hours">' + formatDuration(totalMs) + '</div>'
+      + badgeHTML
+      + '</div>'
+      + '</div>'
+      + '<div class="loc-actions" onclick="event.stopPropagation()">'
+      + checkinBtn + editBtn + deleteBtn
+      + '</div>'
+      + '</div>';
+  }
+  list.innerHTML = html;
 }
 
 function addLocation() {
@@ -291,7 +318,8 @@ function addLocation() {
   toast(`"${name}" added`);
 }
 
-function deleteLocation(id) {
+function deleteLocation(elOrId) {
+  var id = (typeof elOrId === 'string') ? elOrId : elOrId.getAttribute('data-id');
   if (state.activeSession && state.activeSession.locId === id) {
     toast("Can't delete while checked in"); return;
   }
@@ -302,14 +330,59 @@ function deleteLocation(id) {
   renderLocations();
 }
 
-function editLocation(id) {
+let editingId = null;
+
+function editLocation(elOrId) {
+  var id = (typeof elOrId === 'string') ? elOrId : elOrId.getAttribute('data-id');
   const loc = state.locations.find(l => l.id === id);
-  const newName = prompt('Rename location:', loc.name);
-  if (newName && newName.trim()) {
-    loc.name = newName.trim();
-    save();
-    renderLocations();
+  editingId = id;
+  document.getElementById('edit-name').value = loc.name;
+  document.getElementById('edit-coords').value = (loc.lat && loc.lng) ? `${loc.lat}, ${loc.lng}` : '';
+  document.getElementById('edit-radius').value = loc.radius || 100;
+  document.getElementById('edit-overlay').classList.add('visible');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-overlay').classList.remove('visible');
+  editingId = null;
+}
+
+function saveEdit() {
+  const loc = state.locations.find(l => l.id === editingId);
+  if (!loc) return;
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) { toast('Name cannot be empty'); return; }
+  const radius = parseInt(document.getElementById('edit-radius').value) || 100;
+  const raw = document.getElementById('edit-coords').value.trim();
+  let lat = null, lng = null;
+  if (raw) {
+    const parts = raw.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      lat = parts[0]; lng = parts[1];
+    } else {
+      toast('Invalid coordinates — use: 48.1234, 17.5678'); return;
+    }
   }
+  loc.name = name;
+  loc.radius = radius;
+  loc.lat = lat;
+  loc.lng = lng;
+  save();
+  closeEditModal();
+  renderLocations();
+  toast(`"${name}" updated`);
+}
+
+function editCaptureGPS() {
+  if (!navigator.geolocation) { toast('GPS not available'); return; }
+  document.getElementById('gps-overlay').classList.add('visible');
+  navigator.geolocation.getCurrentPosition(pos => {
+    document.getElementById('gps-overlay').classList.remove('visible');
+    document.getElementById('edit-coords').value = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+  }, err => {
+    document.getElementById('gps-overlay').classList.remove('visible');
+    toast('GPS error: ' + err.message);
+  }, {enableHighAccuracy: true, timeout: 15000});
 }
 
 function totalMillis(locId) {
@@ -340,7 +413,8 @@ function formatDurationFull(ms) {
 }
 
 // ── Check in / out ─────────────────────────────────────────────────────────
-function checkIn(locId) {
+function checkIn(elOrId) {
+  var locId = (typeof elOrId === 'string') ? elOrId : elOrId.getAttribute('data-id');
   if (state.activeSession) {
     toast('Already checked in — check out first');
     return;
@@ -468,62 +542,61 @@ function captureGPS() {
 
 // ── History ────────────────────────────────────────────────────────────────
 function renderHistory() {
-  const list = document.getElementById('hist-list');
-  const all = [...state.sessions].sort((a,b) => b.start - a.start);
+  var list = document.getElementById('hist-list');
+  var all = state.sessions.slice().sort(function(a,b){ return b.start - a.start; });
   if (all.length === 0) {
     list.innerHTML = '<div class="hist-empty">No sessions yet.<br>Check in to a location first.</div>';
     return;
   }
-  list.innerHTML = all.map(s => {
-    const loc = state.locations.find(l => l.id === s.locId);
-    const name = loc ? loc.name : 'Deleted location';
-    const start = new Date(s.start);
-    const end = s.end ? new Date(s.end) : null;
-    const dur = s.end ? s.end - s.start : Date.now() - s.start;
-    return `
-    <div class="hist-entry">
-      <div class="h-name">${name}</div>
-      <div class="h-time">${formatDuration(dur)}</div>
-      <div class="h-meta">
-        ${start.toLocaleDateString()} · ${start.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
-        ${end ? ' → ' + end.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : ' · ongoing'}
-      </div>
-    </div>`;
+  list.innerHTML = all.map(function(s) {
+    var loc = state.locations.find(function(l){ return l.id === s.locId; });
+    var name = loc ? loc.name : 'Deleted location';
+    var start = new Date(s.start);
+    var end = s.end ? new Date(s.end) : null;
+    var dur = s.end ? s.end - s.start : Date.now() - s.start;
+    var timeOpts = {hour:'2-digit', minute:'2-digit'};
+    var endStr = end ? ' &rarr; ' + end.toLocaleTimeString([], timeOpts) : ' &middot; ongoing';
+    return '<div class="hist-entry">'
+      + '<div class="h-name">' + name + '</div>'
+      + '<div class="h-time">' + formatDuration(dur) + '</div>'
+      + '<div class="h-meta">' + start.toLocaleDateString() + ' &middot; ' + start.toLocaleTimeString([], timeOpts) + endStr + '</div>'
+      + '</div>';
   }).join('');
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────
 function renderStats() {
-  const allSess = state.sessions;
-  const totalMs = allSess.reduce((s,e) => s + (e.end - e.start), 0);
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayMs = allSess.filter(s => s.start >= today.getTime()).reduce((s,e) => s + (e.end - e.start), 0);
-  const week = new Date(today); week.setDate(week.getDate() - 7);
-  const weekMs = allSess.filter(s => s.start >= week.getTime()).reduce((s,e) => s + (e.end - e.start), 0);
+  var allSess = state.sessions;
+  var totalMs = allSess.reduce(function(s,e){ return s + (e.end - e.start); }, 0);
+  var today = new Date(); today.setHours(0,0,0,0);
+  var todayTime = today.getTime();
+  var todaySess = allSess.filter(function(s){ return s.start >= todayTime; });
+  var todayMs = todaySess.reduce(function(s,e){ return s + (e.end - e.start); }, 0);
+  var week = new Date(today); week.setDate(week.getDate() - 7);
+  var weekMs = allSess.filter(function(s){ return s.start >= week.getTime(); }).reduce(function(s,e){ return s + (e.end - e.start); }, 0);
 
-  document.getElementById('stats-summary').innerHTML = `
-    <div class="stat-card"><div class="s-label">Today</div><div class="s-value">${formatDuration(todayMs)}</div><div class="s-sub">${allSess.filter(s=>s.start>=today.getTime()).length} sessions</div></div>
-    <div class="stat-card"><div class="s-label">This week</div><div class="s-value">${formatDuration(weekMs)}</div><div class="s-sub">7-day total</div></div>
-    <div class="stat-card"><div class="s-label">All time</div><div class="s-value">${formatDuration(totalMs)}</div><div class="s-sub">${allSess.length} sessions</div></div>
-    <div class="stat-card"><div class="s-label">Locations</div><div class="s-value">${state.locations.length}</div><div class="s-sub">tracked</div></div>
-  `;
+  document.getElementById('stats-summary').innerHTML =
+    '<div class="stat-card"><div class="s-label">Today</div><div class="s-value">' + formatDuration(todayMs) + '</div><div class="s-sub">' + todaySess.length + ' sessions</div></div>'
+    + '<div class="stat-card"><div class="s-label">This week</div><div class="s-value">' + formatDuration(weekMs) + '</div><div class="s-sub">7-day total</div></div>'
+    + '<div class="stat-card"><div class="s-label">All time</div><div class="s-value">' + formatDuration(totalMs) + '</div><div class="s-sub">' + allSess.length + ' sessions</div></div>'
+    + '<div class="stat-card"><div class="s-label">Locations</div><div class="s-value">' + state.locations.length + '</div><div class="s-sub">tracked</div></div>';
 
-  const byLoc = {};
-  state.locations.forEach(l => { byLoc[l.id] = {name: l.name, ms: 0}; });
-  allSess.forEach(s => { if (byLoc[s.locId]) byLoc[s.locId].ms += (s.end - s.start); });
-  const sorted = Object.values(byLoc).sort((a,b) => b.ms - a.ms);
-  const maxMs = sorted[0]?.ms || 1;
+  var byLoc = {};
+  state.locations.forEach(function(l){ byLoc[l.id] = {name: l.name, ms: 0}; });
+  allSess.forEach(function(s){ if (byLoc[s.locId]) byLoc[s.locId].ms += (s.end - s.start); });
+  var sorted = Object.values(byLoc).sort(function(a,b){ return b.ms - a.ms; });
+  var maxMs = (sorted[0] && sorted[0].ms) ? sorted[0].ms : 1;
 
   if (sorted.length === 0) {
     document.getElementById('bar-rows').innerHTML = '<div style="color:var(--muted);font-size:13px">No data yet</div>';
     return;
   }
-  document.getElementById('bar-rows').innerHTML = sorted.map(r => `
-    <div class="bar-row">
-      <div class="bar-label"><span>${r.name}</span><span>${formatDuration(r.ms)}</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(r.ms/maxMs*100)}%"></div></div>
-    </div>
-  `).join('');
+  document.getElementById('bar-rows').innerHTML = sorted.map(function(r) {
+    return '<div class="bar-row">'
+      + '<div class="bar-label"><span>' + r.name + '</span><span>' + formatDuration(r.ms) + '</span></div>'
+      + '<div class="bar-track"><div class="bar-fill" style="width:' + Math.round(r.ms/maxMs*100) + '%"></div></div>'
+      + '</div>';
+  }).join('');
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────
